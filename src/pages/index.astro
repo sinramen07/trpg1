@@ -648,7 +648,7 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		}
 	});
 
-	// ==================== 시나리오 인트로 오버레이 & YouTube BGM 페이드인 & 유성우 시퀀스 연동 ====================
+	// ==================== 시나리오 인트로 오버레이 & YouTube BGM 안정 재생 & 유성우 시퀀스 연동 ====================
 	const scenarioOverlay = document.getElementById('scenario-intro-overlay');
 	const typingTextEl = document.getElementById('overlay-typing-text');
 	const promptTextEl = document.getElementById('overlay-prompt-text');
@@ -656,11 +656,11 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 
 	const muteBtn = document.getElementById('bgm-mute-btn');
 	const muteLabel = document.getElementById('bgm-mute-label');
+	const BGM_STEADY_VOLUME = 60; // 일정한 볼륨 0.6 (YouTube IFrame API 기준 60)
 	let ytPlayer: any = null;
 	let isPlayerReady = false;
 	let isMuted = false;
 	let bgmTriggeredByUser = false;
-	let fadeIntervalId: number | null = null;
 
 	function updateMuteUI() {
 		if (!muteBtn || !muteLabel) return;
@@ -668,36 +668,17 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		muteLabel.textContent = isMuted ? 'MUTE' : 'BGM ON';
 	}
 
-	// BGM 볼륨 페이드인 (Volume 0 -> 1 [YouTube API 기준 0 -> 100])
-	function startBgmFadeIn() {
+	// 볼륨 타이머(setInterval) 없이 클릭 즉시 일정한 볼륨(0.6 / 60)으로 안정 재생
+	function startBgmPlayback() {
 		if (!ytPlayer || !isPlayerReady) return;
 		try {
-			if (fadeIntervalId !== null) {
-				window.clearInterval(fadeIntervalId);
-			}
-			ytPlayer.setVolume?.(0);
-			if (!isMuted) {
+			ytPlayer.setVolume?.(BGM_STEADY_VOLUME);
+			if (isMuted) {
+				ytPlayer.mute?.();
+			} else {
 				ytPlayer.unMute?.();
 			}
 			ytPlayer.playVideo?.();
-
-			let currentVolume = 0; // 0.0 ~ 1.0 정규화 볼륨
-			const durationMs = 1800;
-			const stepMs = 45;
-			const increment = stepMs / durationMs;
-
-			fadeIntervalId = window.setInterval(() => {
-				if (isMuted) {
-					if (fadeIntervalId !== null) window.clearInterval(fadeIntervalId);
-					return;
-				}
-				currentVolume = Math.min(1, currentVolume + increment);
-				ytPlayer?.setVolume?.(Math.round(currentVolume * 100));
-				if (currentVolume >= 1 && fadeIntervalId !== null) {
-					window.clearInterval(fadeIntervalId);
-					fadeIntervalId = null;
-				}
-			}, stepMs);
 		} catch {
 			// YouTube IFrame API 예외 무시
 		}
@@ -726,10 +707,25 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 			events: {
 				onReady: (event: any) => {
 					isPlayerReady = true;
-					event.target.setVolume(0);
-					// 사용자가 API 로드 완료 전에 이미 오버레이를 클릭했다면 즉시 페이드인 재생
+					event.target.setVolume(BGM_STEADY_VOLUME);
+					// 사용자가 API 로드 완료 전에 이미 오버레이를 클릭했다면 즉시 일정 볼륨(60)으로 재생
 					if (bgmTriggeredByUser) {
-						startBgmFadeIn();
+						startBgmPlayback();
+					}
+				},
+				onStateChange: (event: any) => {
+					// YT.PlayerState: ENDED(0), PLAYING(1), PAUSED(2)
+					if (!bgmTriggeredByUser) return;
+					if (event.data === 0) {
+						// 트랙 종료 시 끊김 없이 루프 재생 보장
+						event.target.playVideo?.();
+					} else if (event.data === 1 && !isMuted) {
+						// 재생 중 볼륨이 줄어들거나 음소거되지 않도록 일정 볼륨(60) 유지
+						event.target.unMute?.();
+						event.target.setVolume?.(BGM_STEADY_VOLUME);
+					} else if (event.data === 2 && !isMuted) {
+						// 오버레이/인트로 DOM 제거 시점에 의도치 않게 일시정지되면 즉시 재개
+						event.target.playVideo?.();
 					}
 				},
 			},
@@ -742,14 +738,11 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		updateMuteUI();
 		if (!ytPlayer || !isPlayerReady) return;
 		if (isMuted) {
-			if (fadeIntervalId !== null) {
-				window.clearInterval(fadeIntervalId);
-				fadeIntervalId = null;
-			}
 			ytPlayer.mute?.();
 		} else {
+			bgmTriggeredByUser = true;
 			ytPlayer.unMute?.();
-			ytPlayer.setVolume?.(100);
+			ytPlayer.setVolume?.(BGM_STEADY_VOLUME);
 			ytPlayer.playVideo?.();
 		}
 	});
@@ -777,21 +770,22 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		}, totalTypingTime);
 	}
 
-	// 2) 오버레이 클릭 시: BGM 페이드인 시작 + 오버레이 Blur & Fade-out 후 DOM 제거 + 유성우 연출 실행
+	// 2) 오버레이 클릭 시: 일정 볼륨(0.6)으로 BGM 즉시 재생 + 오버레이 Blur & Fade-out 후 DOM 제거 + 유성우 연출 실행
 	let isOverlayDismissed = false;
 	function dismissScenarioOverlay() {
 		if (isOverlayDismissed) return;
 		isOverlayDismissed = true;
 
-		// 사용자 클릭 제스처 시점에 즉시 BGM 재생 및 Volume 0 -> 1 페이드인
+		// 사용자 클릭 제스처 시점에 즉시 일정한 볼륨(0.6 / 60)으로 BGM 재생 시작
 		bgmTriggeredByUser = true;
-		startBgmFadeIn();
+		startBgmPlayback();
 
-		// 오버레이 Blur + Fade-out 전환 후 DOM에서 완전 제거
+		// 오버레이 Blur + Fade-out 전환 후 DOM에서 완전 제거 (BGM은 계속 유지)
 		if (scenarioOverlay) {
 			scenarioOverlay.classList.add('is-fading-out');
 			window.setTimeout(() => {
 				scenarioOverlay.remove();
+				if (!isMuted) startBgmPlayback();
 			}, 750);
 		}
 
@@ -803,6 +797,7 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 				document.body.style.overflow = '';
 				window.setTimeout(() => {
 					introSequence.remove();
+					if (!isMuted) startBgmPlayback();
 				}, 150);
 			}, 2500);
 		} else {
