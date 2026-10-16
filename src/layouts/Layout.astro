@@ -1,23 +1,137 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>너를 공전하고 싶어 | STRATO SHOUT TRPG</title>
+		<!-- Google Fonts: Gowun Batang, Cormorant Garamond -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=Gowun+Batang:wght@400;700&display=swap"
+			rel="stylesheet"
+		/>
+		<!-- Naver MaruBuri (마루부리) Webfont -->
+		<link
+			rel="stylesheet"
+			href="https://hangeul.pstatic.net/hangeul_static/css/maru-buri.css"
+		/>
+		<!-- Pretendard Variable -->
+		<link
+			rel="stylesheet"
+			as="style"
+			crossorigin
+			href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"
+		/>
 	</head>
 	<body>
 		<slot />
 	</body>
 </html>
 
-<style>
-	html,
+<style is:global>
+	/* SF함박눈 (SF_HambakSnow) 웹폰트 */
+	@font-face {
+		font-family: 'SF_HambakSnow';
+		src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2106@1.1/SF_HambakSnow.woff') format('woff');
+		font-weight: normal;
+		font-style: normal;
+		font-display: swap;
+	}
+
+	/* 이롭게바탕 (SF함박눈과 어울리는 서정적 보조 바탕체) */
+	@font-face {
+		font-family: 'Iropke Batang';
+		src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_2001@1.1/IropkeBatangM.woff') format('woff');
+		font-weight: normal;
+		font-style: normal;
+		font-display: swap;
+	}
+
+	:root {
+		/* Celestial Reverie Color Tokens (DESIGN.md) */
+		--canvas-deep-navy: #080b16;
+		--surface: #10131e;
+		--surface-dim: #10131e;
+		--surface-bright: #363945;
+		--surface-container-lowest: #0b0e19;
+		--surface-container-low: #181b27;
+		--surface-container: #1c1f2b;
+		--surface-container-high: #272936;
+		--surface-container-highest: #313441;
+
+		--primary: #38bdf8;
+		--primary-light: #8ed5ff;
+		--tertiary: #60e0ff;
+		--secondary: #dcc66e;
+		--secondary-light: #fde68a;
+		--champagne: #fdf0d5;
+		--error: #ffb4ab;
+		--emerald: #34d399;
+
+		--text-white: #f8fafc;
+		--text-body: #cbd5e1;
+		--text-muted: #64748b;
+		--on-surface: #e0e1f2;
+		--on-surface-variant: #bdc8d1;
+
+		/* Paper / Epistolary Letter Card */
+		--paper-bg: #fcfaf2;
+		--paper-tint: #f5eedc;
+		--paper-border: #e5dcc5;
+		--paper-ink: #1e2430;
+		--paper-muted: #5a6270;
+		--paper-accent: #0284c7;
+		--paper-red: #b91c1c;
+
+		/* Fonts:
+		   - --font-headline: 헤더 및 중요 타이틀용 SF함박눈
+		   - --font-serif: SF함박눈과 조화로운 서정적 명조/바탕 (이롭게바탕 / 마루부리 / 고운바탕)
+		   - --font-body: 캐릭터 소개 창 등 가독성이 중요한 영역용 폰트 (기존 유지)
+		*/
+		--font-headline: 'SF_HambakSnow', 'MaruBuriBold', 'Gowun Batang', serif;
+		--font-serif: 'Iropke Batang', 'MaruBuri', 'Gowun Batang', serif;
+		--font-body: 'Gowun Batang', 'MaruBuri', 'Pretendard Variable', Pretendard, sans-serif;
+		--font-mono: 'Cormorant Garamond', 'MaruBuri', serif;
+
+		/* Layout */
+		--nav-height: 60px;
+		--radius-sm: 0.25rem;
+		--radius-default: 0.5rem;
+		--radius-md: 0.75rem;
+		--radius-lg: 1rem;
+		--radius-xl: 1.5rem;
+		--radius-full: 9999px;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	html {
+		scroll-behavior: smooth;
+		scroll-padding-top: calc(var(--nav-height) + 16px);
+		background-color: var(--canvas-deep-navy);
+		color: var(--text-white);
+		font-family: var(--font-body);
+	}
+
 	body {
 		margin: 0;
 		width: 100%;
-		height: 100%;
+		min-height: 100vh;
+		overflow-x: hidden;
+		background-color: var(--canvas-deep-navy);
+		line-height: 1.75;
+		word-break: keep-all;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
 	}
 </style>
