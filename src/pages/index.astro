@@ -11,6 +11,16 @@ const stars = Array.from({ length: 85 }, (_, i) => ({
 	color: i % 7 === 0 ? '#60e0ff' : i % 11 === 0 ? '#fde68a' : '#f8fafc',
 }));
 
+// 시나리오 인트로 오버레이용 미세 별빛 파티클 데이터 (순수 CSS)
+const overlayStars = Array.from({ length: 70 }, (_, i) => ({
+	left: `${(i * 41 + 9) % 100}%`,
+	top: `${(i * 59 + 11) % 100}%`,
+	size: (i % 2) + 1,
+	delay: `${((i * 9) % 45) / 10}s`,
+	duration: `${2.6 + ((i * 13) % 30) / 10}s`,
+	opacity: (0.25 + ((i * 7) % 55) / 100).toFixed(2),
+}));
+
 // 인트로 유성우 다발(첫 유성이 떨어지고 간격을 둔 뒤 1.20s부터 쏟아지는 유성우) 데이터
 const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 	left: `${18 + ((i * 17) % 80)}%`,
@@ -22,7 +32,34 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 ---
 
 <Layout>
-	<!-- ==================== 페이지 진입 유성우 인트로 시퀀스 (총 2.5초) ==================== -->
+	<!-- ==================== 0. 감성 시나리오 인트로 오버레이 (순수 CSS & JS) ==================== -->
+	<div
+		id="scenario-intro-overlay"
+		class="scenario-intro-overlay"
+		role="button"
+		tabindex="0"
+		aria-label="밤하늘 올려다보기 - 클릭하여 시나리오 진입"
+	>
+		<!-- 미세하게 반짝이는 밤하늘 별빛 파티클 배경 -->
+		<div class="overlay-starfield" aria-hidden="true">
+			{
+				overlayStars.map((s) => (
+					<span
+						class="overlay-micro-star"
+						style={`left:${s.left}; top:${s.top}; width:${s.size}px; height:${s.size}px; --o-delay:${s.delay}; --o-dur:${s.duration}; --o-max:${s.opacity};`}
+					/>
+				))
+			}
+		</div>
+
+		<!-- 중앙 감성 문구 및 Pulse 안내 텍스트 -->
+		<div class="overlay-center-box">
+			<p id="overlay-typing-text" class="overlay-main-phrase" aria-live="polite"></p>
+			<span id="overlay-prompt-text" class="overlay-pulse-prompt">밤하늘 올려다보기</span>
+		</div>
+	</div>
+
+	<!-- ==================== 페이지 진입 유성우 인트로 시퀀스 (오버레이 클릭 직후 2.5초 재생) ==================== -->
 	<div id="intro-sequence" class="intro-sequence" aria-hidden="true">
 		<div class="intro-sky-shot">
 			<div class="intro-stars-bg"></div>
@@ -611,11 +648,19 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		}
 	});
 
-	// ==================== YouTube 음원(XogSflwXgpw) 재생 및 왼쪽 상단 음소거 제어 ====================
+	// ==================== 시나리오 인트로 오버레이 & YouTube BGM 페이드인 & 유성우 시퀀스 연동 ====================
+	const scenarioOverlay = document.getElementById('scenario-intro-overlay');
+	const typingTextEl = document.getElementById('overlay-typing-text');
+	const promptTextEl = document.getElementById('overlay-prompt-text');
+	const introSequence = document.getElementById('intro-sequence');
+
 	const muteBtn = document.getElementById('bgm-mute-btn');
 	const muteLabel = document.getElementById('bgm-mute-label');
 	let ytPlayer: any = null;
+	let isPlayerReady = false;
 	let isMuted = false;
+	let bgmTriggeredByUser = false;
+	let fadeIntervalId: number | null = null;
 
 	function updateMuteUI() {
 		if (!muteBtn || !muteLabel) return;
@@ -623,7 +668,42 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		muteLabel.textContent = isMuted ? 'MUTE' : 'BGM ON';
 	}
 
-	// YouTube IFrame Player API 로드
+	// BGM 볼륨 페이드인 (Volume 0 -> 1 [YouTube API 기준 0 -> 100])
+	function startBgmFadeIn() {
+		if (!ytPlayer || !isPlayerReady) return;
+		try {
+			if (fadeIntervalId !== null) {
+				window.clearInterval(fadeIntervalId);
+			}
+			ytPlayer.setVolume?.(0);
+			if (!isMuted) {
+				ytPlayer.unMute?.();
+			}
+			ytPlayer.playVideo?.();
+
+			let currentVolume = 0; // 0.0 ~ 1.0 정규화 볼륨
+			const durationMs = 1800;
+			const stepMs = 45;
+			const increment = stepMs / durationMs;
+
+			fadeIntervalId = window.setInterval(() => {
+				if (isMuted) {
+					if (fadeIntervalId !== null) window.clearInterval(fadeIntervalId);
+					return;
+				}
+				currentVolume = Math.min(1, currentVolume + increment);
+				ytPlayer?.setVolume?.(Math.round(currentVolume * 100));
+				if (currentVolume >= 1 && fadeIntervalId !== null) {
+					window.clearInterval(fadeIntervalId);
+					fadeIntervalId = null;
+				}
+			}, stepMs);
+		} catch {
+			// YouTube IFrame API 예외 무시
+		}
+	}
+
+	// YouTube IFrame Player API 로드 (클릭 전 미리 준비)
 	const tag = document.createElement('script');
 	tag.src = 'https://www.youtube.com/iframe_api';
 	document.head.appendChild(tag);
@@ -634,7 +714,7 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 			height: '1',
 			videoId: 'XogSflwXgpw',
 			playerVars: {
-				autoplay: 1,
+				autoplay: 0,
 				loop: 1,
 				playlist: 'XogSflwXgpw',
 				controls: 0,
@@ -645,24 +725,12 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 			},
 			events: {
 				onReady: (event: any) => {
-					event.target.setVolume(60);
-					event.target.playVideo();
-					// 브라우저 자동재생 정책으로 인해 차단된 경우 첫 클릭/터치 시 즉시 재생
-					setTimeout(() => {
-						const state = event.target.getPlayerState?.();
-						if (state !== 1 && !isMuted) {
-							const unlockAudio = () => {
-								if (!isMuted && ytPlayer) {
-									ytPlayer.unMute?.();
-									ytPlayer.playVideo?.();
-								}
-								window.removeEventListener('click', unlockAudio);
-								window.removeEventListener('touchstart', unlockAudio);
-							};
-							window.addEventListener('click', unlockAudio, { once: true });
-							window.addEventListener('touchstart', unlockAudio, { once: true });
-						}
-					}, 600);
+					isPlayerReady = true;
+					event.target.setVolume(0);
+					// 사용자가 API 로드 완료 전에 이미 오버레이를 클릭했다면 즉시 페이드인 재생
+					if (bgmTriggeredByUser) {
+						startBgmFadeIn();
+					}
 				},
 			},
 		});
@@ -672,30 +740,225 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		e.stopPropagation();
 		isMuted = !isMuted;
 		updateMuteUI();
-		if (!ytPlayer) return;
+		if (!ytPlayer || !isPlayerReady) return;
 		if (isMuted) {
+			if (fadeIntervalId !== null) {
+				window.clearInterval(fadeIntervalId);
+				fadeIntervalId = null;
+			}
 			ytPlayer.mute?.();
 		} else {
 			ytPlayer.unMute?.();
+			ytPlayer.setVolume?.(100);
 			ytPlayer.playVideo?.();
 		}
 	});
 
-	// ==================== 페이지 진입 인트로 시퀀스 (2.5초 후 완전히 종료 및 제거) ====================
-	const introOverlay = document.getElementById('intro-sequence');
-	if (introOverlay) {
-		setTimeout(() => {
-			introOverlay.classList.add('is-finished');
-			setTimeout(() => {
-				introOverlay.remove();
-			}, 120);
-		}, 2500);
+	// 1) "너는 알고 있을까?" 감성 타이핑 + 페이드인 연출 후 "밤하늘 올려다보기" Pulse 노출
+	const introPhrase = '너는 알고 있을까?';
+	if (scenarioOverlay && typingTextEl) {
+		document.body.style.overflow = 'hidden';
+
+		const chars = Array.from(introPhrase);
+		const startDelay = 420;
+		const charInterval = 115;
+
+		chars.forEach((ch, idx) => {
+			const span = document.createElement('span');
+			span.className = 'overlay-char';
+			span.textContent = ch === ' ' ? '\u00A0' : ch;
+			span.style.animationDelay = `${startDelay + idx * charInterval}ms`;
+			typingTextEl.appendChild(span);
+		});
+
+		const totalTypingTime = startDelay + chars.length * charInterval + 350;
+		window.setTimeout(() => {
+			promptTextEl?.classList.add('is-visible');
+		}, totalTypingTime);
 	}
+
+	// 2) 오버레이 클릭 시: BGM 페이드인 시작 + 오버레이 Blur & Fade-out 후 DOM 제거 + 유성우 연출 실행
+	let isOverlayDismissed = false;
+	function dismissScenarioOverlay() {
+		if (isOverlayDismissed) return;
+		isOverlayDismissed = true;
+
+		// 사용자 클릭 제스처 시점에 즉시 BGM 재생 및 Volume 0 -> 1 페이드인
+		bgmTriggeredByUser = true;
+		startBgmFadeIn();
+
+		// 오버레이 Blur + Fade-out 전환 후 DOM에서 완전 제거
+		if (scenarioOverlay) {
+			scenarioOverlay.classList.add('is-fading-out');
+			window.setTimeout(() => {
+				scenarioOverlay.remove();
+			}, 750);
+		}
+
+		// 오버레이가 사라지기 시작하면서 기존 유성우 인트로 시퀀스(2.5초) 재생 및 메인 페이지 연결
+		if (introSequence) {
+			introSequence.classList.add('is-playing');
+			window.setTimeout(() => {
+				introSequence.classList.add('is-finished');
+				document.body.style.overflow = '';
+				window.setTimeout(() => {
+					introSequence.remove();
+				}, 150);
+			}, 2500);
+		} else {
+			document.body.style.overflow = '';
+		}
+	}
+
+	scenarioOverlay?.addEventListener('click', dismissScenarioOverlay);
+	scenarioOverlay?.addEventListener('keydown', (e) => {
+		const keyEvent = e as KeyboardEvent;
+		if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+			keyEvent.preventDefault();
+			dismissScenarioOverlay();
+		}
+	});
 </script>
 
 <style>
-	/* ==================== 페이지 진입 유성우 인트로 시퀀스 (총 2.5s) ====================
-	   타임라인:
+	/* ==================== 0. 감성 시나리오 인트로 오버레이 (순수 CSS & JS) ==================== */
+	.scenario-intro-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 10000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		cursor: pointer;
+		user-select: none;
+		background:
+			radial-gradient(ellipse 85% 65% at 50% 42%, #11192e 0%, #0a0e1a 58%, #060912 100%);
+		transition:
+			opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+			filter 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+			transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	.scenario-intro-overlay.is-fading-out {
+		opacity: 0;
+		filter: blur(18px);
+		transform: scale(1.03);
+		pointer-events: none;
+	}
+
+	/* 미세하게 반짝이는 별빛 파티클 배경 */
+	.overlay-starfield {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+
+	.overlay-micro-star {
+		position: absolute;
+		border-radius: 50%;
+		background: #e2f1ff;
+		box-shadow: 0 0 6px rgba(148, 216, 255, 0.65);
+		opacity: 0.12;
+		animation: overlay-star-twinkle var(--o-dur, 3.2s) ease-in-out var(--o-delay, 0s) infinite alternate;
+	}
+
+	@keyframes overlay-star-twinkle {
+		0% {
+			opacity: 0.08;
+			transform: scale(0.85);
+		}
+		100% {
+			opacity: var(--o-max, 0.65);
+			transform: scale(1.15);
+		}
+	}
+
+	/* 중앙 문구 및 안내 텍스트 레이아웃 */
+	.overlay-center-box {
+		position: relative;
+		z-index: 2;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2.2rem;
+		padding: 2rem;
+		text-align: center;
+	}
+
+	.overlay-main-phrase {
+		margin: 0;
+		min-height: 1.5em;
+		font-family: var(--font-display);
+		font-size: clamp(1.55rem, 3.6vw, 2.45rem);
+		font-weight: normal;
+		letter-spacing: 0.12em;
+		color: #f8fafc;
+		text-shadow:
+			0 0 22px rgba(96, 224, 255, 0.38),
+			0 2px 14px rgba(0, 0, 0, 0.75);
+	}
+
+	/* JS로 동적 생성되는 글자별 타이핑 + 서서히 페이드인 효과 */
+	:global(.overlay-char) {
+		display: inline-block;
+		opacity: 0;
+		filter: blur(6px);
+		transform: translateY(6px);
+		animation: overlay-char-appear 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+	}
+
+	@keyframes overlay-char-appear {
+		0% {
+			opacity: 0;
+			filter: blur(6px);
+			transform: translateY(6px);
+		}
+		100% {
+			opacity: 1;
+			filter: blur(0px);
+			transform: translateY(0);
+		}
+	}
+
+	/* 문구 출력 완료 후 숨쉬듯 깜빡이는(Pulse) 안내 텍스트 */
+	.overlay-pulse-prompt {
+		display: inline-block;
+		font-family: var(--font-serif);
+		font-size: clamp(0.88rem, 1.5vw, 1.02rem);
+		font-weight: 400;
+		letter-spacing: 0.24em;
+		padding-left: 0.24em;
+		color: rgba(186, 230, 253, 0.85);
+		text-shadow: 0 0 14px rgba(96, 224, 255, 0.45);
+		opacity: 0;
+		transform: translateY(6px);
+		transition:
+			opacity 0.8s ease,
+			transform 0.8s ease;
+	}
+
+	.overlay-pulse-prompt.is-visible {
+		opacity: 0.85;
+		transform: translateY(0);
+		animation: overlay-prompt-pulse 2.6s ease-in-out 0.8s infinite;
+	}
+
+	@keyframes overlay-prompt-pulse {
+		0%,
+		100% {
+			opacity: 0.85;
+			text-shadow: 0 0 16px rgba(96, 224, 255, 0.55);
+		}
+		50% {
+			opacity: 0.28;
+			text-shadow: 0 0 6px rgba(96, 224, 255, 0.15);
+		}
+	}
+
+	/* ==================== 페이지 진입 유성우 인트로 시퀀스 (오버레이 클릭 후 총 2.5s) ====================
+	   타임라인 (.is-playing 활성화 시점 기준):
 	   - 0.15s ~ 0.65s: 밤하늘에 첫 번째 단일 유성(Lead Meteor)이 길게 떨어짐
 	   - 0.65s ~ 1.20s: 첫 유성 낙하 후 여운을 남기는 정적 간격 (약 0.55s)
 	   - 1.20s ~ 2.20s: 이어서 여러 개의 유성우(Meteor Shower)가 쏟아짐
@@ -708,6 +971,9 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		overflow: hidden;
 		background: #050814;
 		pointer-events: none;
+	}
+
+	.intro-sequence.is-playing {
 		animation: intro-fade-out 0.4s ease-out 2.1s forwards;
 	}
 
@@ -748,7 +1014,7 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 			radial-gradient(1.2px 1.2px at 45% 48%, #ffffff, transparent);
 	}
 
-	/* 1) 진입 직후(0.15s~0.65s) 떨어지는 첫 번째 단일 유성 */
+	/* 1) 오버레이 해제 직후(0.15s~0.65s) 떨어지는 첫 번째 단일 유성 */
 	.intro-lead-meteor {
 		position: absolute;
 		top: 6%;
@@ -763,6 +1029,9 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		opacity: 0;
 		transform: rotate(-35deg) translate3d(120px, -80px, 0);
 		will-change: transform, opacity;
+	}
+
+	.intro-sequence.is-playing .intro-lead-meteor {
 		animation: lead-meteor-fall 0.5s cubic-bezier(0.25, 0.8, 0.4, 1) 0.15s forwards;
 	}
 
@@ -813,6 +1082,9 @@ const meteorShower = Array.from({ length: 18 }, (_, i) => ({
 		opacity: 0;
 		transform: rotate(-35deg) translate3d(100px, 0, 0);
 		will-change: transform, opacity;
+	}
+
+	.intro-sequence.is-playing .shower-meteor {
 		animation: shower-meteor-fall var(--m-dur, 0.52s) ease-in var(--m-delay, 1.2s) forwards;
 	}
 
